@@ -4,6 +4,10 @@
 Writes one original line of plain text -- an alien tourist's review of
 planet Earth -- to /output/entry.txt. Deterministic, no network access,
 no secrets, no reading of git history.
+
+Pipeline (each step is a small, separately named function):
+    review line -> validation -> UTF-8 bytes -> output path -> write
+    -> read back and verify -> report.
 """
 
 import hashlib
@@ -25,18 +29,33 @@ def get_review_line():
     return REVIEW_LINE
 
 
+def validate_line(line):
+    """Check the review line is a single line with no trailing newline."""
+    if not line:
+        raise SystemExit("validation failed: review line is empty")
+    if "\n" in line or "\r" in line:
+        raise SystemExit("validation failed: review line must be one line")
+    if line != line.strip():
+        raise SystemExit("validation failed: review line has stray padding")
+    return line
+
+
+def encode_entry(line):
+    """Encode the validated line as UTF-8 bytes, no trailing newline."""
+    return line.encode("utf-8")
+
+
 def prepare_output_path():
     """Create the output directory if needed and return the file path."""
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     return OUTPUT_FILE
 
 
-def write_entry(path, line):
-    """Write the line to path as UTF-8 with no trailing newline."""
-    data = line.encode("utf-8")
+def write_entry(path, data):
+    """Write the bytes to path, replacing any previous content."""
     with open(path, "wb") as handle:
         handle.write(data)
-    return data
+    return len(data)
 
 
 def read_back_and_verify(path, expected_bytes):
@@ -61,10 +80,12 @@ def report(path, data):
 
 
 def main():
-    """Build the review line, write it, verify it, report it."""
+    """Run the pipeline: line -> validate -> encode -> write -> verify."""
     line = get_review_line()
+    checked = validate_line(line)
+    data = encode_entry(checked)
     path = prepare_output_path()
-    data = write_entry(path, line)
+    write_entry(path, data)
     verified = read_back_and_verify(path, data)
     report(path, verified)
     return 0
